@@ -69,7 +69,7 @@ Enter your new password >>> ****
 Please reenter your password >>> ****
 ```
 
-This password will be used to encrypt sensitive configuration settings e.g. api keys, secrets and wallet private keys. Please note, for security reason, the system does not store your password anywhere, so in case of forgotten password, there is no way to recover it.
+This password will be used to encrypt sensitive configuration settings e.g. API keys, secrets and wallet private keys. Please note, for security reason, the system does not store your password anywhere, so in case of forgotten password, there is no way to recover it.
 
 Next, we'll create a configuration for the `pure market making` strategy which makes a market on a single trading pair.
 
