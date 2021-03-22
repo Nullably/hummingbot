@@ -14,7 +14,8 @@ from hummingbot.core.event.events import (
     MarketEvent,
     BuyOrderCreatedEvent,
     SellOrderCreatedEvent,
-    OrderCancelledEvent, BuyOrderCompletedEvent, SellOrderCompletedEvent
+    OrderCancelledEvent, BuyOrderCompletedEvent, SellOrderCompletedEvent,
+    PositionAction, PositionMode
 )
 from hummingbot.core.network_iterator import NetworkStatus
 from hummingbot.logger.struct_logger import METRICS_LOG_LEVEL
@@ -47,10 +48,12 @@ class BinancePerpetualMarketUnitTest(unittest.TestCase):
         cls._ev_loop = asyncio.get_event_loop()
         cls.clock: Clock = Clock(ClockMode.REALTIME)
         cls.market: BinancePerpetualDerivative = BinancePerpetualDerivative(
-            api_key=conf.binance_perpetual_api_key,
-            api_secret=conf.binance_perpetual_api_secret,
+            binance_perpetual_api_key="Nx00jeW2kiQHPLYmOI68kzMLYH1FnHdKVnj1yW3MvS0J2gPc3hJZSkNxxfx6TGW4",
+            binance_perpetual_api_secret="PigBne0jl7hcumX7gDhTJ70hQvfEcASXxT9a627PWXZ8M79abnSWzD4YgskC4Ho3",
             trading_pairs=["ETH-USDT"]
         )
+        cls.market.set_leverage("ETH-USDT", 5)
+        cls.market.set_position_mode(PositionMode.ONEWAY)
         print("Initializing Binance Perpetual market... this will take about a minute.")
         cls.ev_loop: asyncio.BaseEventLoop = asyncio.get_event_loop()
         cls.clock.add_iterator(cls.market)
@@ -101,7 +104,7 @@ class BinancePerpetualMarketUnitTest(unittest.TestCase):
         network_status: NetworkStatus = self.ev_loop.run_until_complete(self.market.check_network())
         self.assertEqual(NetworkStatus.CONNECTED, network_status)
 
-    @unittest.skip("")
+    # @unittest.skip("")
     def test_buy_and_sell_order_then_cancel_individually(self):
         trading_pair = "ETH-USDT"
         # Create Buy Order
@@ -109,7 +112,8 @@ class BinancePerpetualMarketUnitTest(unittest.TestCase):
             trading_pair=trading_pair,
             amount=Decimal(0.01),
             order_type=OrderType.LIMIT,
-            price=Decimal(300)
+            price=Decimal(1600),
+            position_action=PositionAction.OPEN
         )
         [order_created_event] = self.run_parallel(self.market_logger.wait_for(BuyOrderCreatedEvent))
         order_created_event: BuyOrderCreatedEvent = order_created_event
@@ -123,7 +127,8 @@ class BinancePerpetualMarketUnitTest(unittest.TestCase):
             trading_pair=trading_pair,
             amount=Decimal(0.01),
             order_type=OrderType.LIMIT,
-            price=Decimal(500)
+            price=Decimal(2000),
+            position_action=PositionAction.OPEN
         )
         [order_created_event] = self.run_parallel(self.market_logger.wait_for(SellOrderCreatedEvent))
         order_created_event: SellOrderCreatedEvent = order_created_event
@@ -230,7 +235,7 @@ class BinancePerpetualMarketUnitTest(unittest.TestCase):
         self.assertTrue(sell_order_id not in self.market.in_flight_orders)
         self.assertTrue(buy_order_id not in self.market.in_flight_orders)
 
-    @unittest.skip("")
+    # @unittest.skip("")
     def test_order_fill_event(self):
         trading_pair = "ETH-USDT"
 
@@ -246,7 +251,8 @@ class BinancePerpetualMarketUnitTest(unittest.TestCase):
             trading_pair=trading_pair,
             amount=quantized_amount,
             order_type=OrderType.LIMIT,
-            price=quantized_price
+            price=quantized_price,
+            position_action=PositionAction.OPEN
         )
         [order_completed_event] = self.run_parallel(self.market_logger.wait_for(BuyOrderCompletedEvent))
         self.assertEqual(buy_order_id, order_completed_event.order_id)
@@ -265,7 +271,8 @@ class BinancePerpetualMarketUnitTest(unittest.TestCase):
             trading_pair=trading_pair,
             amount=quantized_amount,
             order_type=OrderType.LIMIT,
-            price=quantized_price
+            price=quantized_price,
+            position_action=PositionAction.OPEN
         )
         [order_completed_event] = self.run_parallel(self.market_logger.wait_for(SellOrderCompletedEvent))
         self.assertEqual(sell_order_id, order_completed_event.order_id)

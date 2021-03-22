@@ -1,0 +1,26 @@
+template_version: 1
+strategy: x_mm_on_steroids
+
+markets:
+  binance_perpetual:
+  - BTC-USDT
+
+
+mm_markets: BTC-USDT,ETH-USDT
+
+token: USDT
+
+order_amount: 20
+
+spread: 2.0
+
+order_refresh_time: 5.0
+
+order_refresh_tolerance_pct: 0.1
+
+volatility_interval: 300
+
+avg_volatility_period: 10
+
+volatility_to_spread_multiplier: 1.0
+
