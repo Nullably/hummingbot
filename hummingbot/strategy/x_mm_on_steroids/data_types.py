@@ -2,20 +2,20 @@
 from decimal import Decimal
 
 
-class PriceSize:
-    def __init__(self, price: Decimal, size: Decimal):
+class PriceAmount:
+    def __init__(self, price: Decimal, amount: Decimal):
         self.price: Decimal = price
-        self.size: Decimal = size
+        self.amount: Decimal = amount
 
     def __repr__(self):
-        return f"[ p: {self.price} s: {self.size} ]"
+        return f"[ p: {self.price} a: {self.amount} ]"
 
 
 class Proposal:
-    def __init__(self, market: str, buy: PriceSize, sell: PriceSize):
+    def __init__(self, market: str, buy: PriceAmount, sell: PriceAmount):
         self.market: str = market
-        self.buy: PriceSize = buy
-        self.sell: PriceSize = sell
+        self.buy: PriceAmount = buy
+        self.sell: PriceAmount = sell
 
     def __repr__(self):
         return f"{self.market} buy: {self.buy} sell: {self.sell}"
