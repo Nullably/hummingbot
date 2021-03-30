@@ -48,8 +48,8 @@ class BinancePerpetualMarketUnitTest(unittest.TestCase):
         cls._ev_loop = asyncio.get_event_loop()
         cls.clock: Clock = Clock(ClockMode.REALTIME)
         cls.market: BinancePerpetualDerivative = BinancePerpetualDerivative(
-            binance_perpetual_api_key="Nx00jeW2kiQHPLYmOI68kzMLYH1FnHdKVnj1yW3MvS0J2gPc3hJZSkNxxfx6TGW4",
-            binance_perpetual_api_secret="PigBne0jl7hcumX7gDhTJ70hQvfEcASXxT9a627PWXZ8M79abnSWzD4YgskC4Ho3",
+            binance_perpetual_api_key="",
+            binance_perpetual_api_secret="",
             trading_pairs=["ETH-USDT"]
         )
         cls.market.set_leverage("ETH-USDT", 5)
