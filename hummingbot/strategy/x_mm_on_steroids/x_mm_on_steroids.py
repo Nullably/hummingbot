@@ -53,7 +53,7 @@ class XMmOnSteroidsStrategy(StrategyPyBase):
         self._volatility_interval = int(str(parameters["volatility_interval"]))
         self._avg_volatility_period = int(str(parameters["avg_volatility_period"]))
         self._volatility_to_spread_multiplier = Decimal(str(parameters["volatility_to_spread_multiplier"]))
-        self._steroids_level = Decimal(str(parameters["steroids_level"]))
+        self._steroids_level = int(str(parameters["steroids_level"]))
 
         self._short_budgets = {}
         self._long_budgets = {}
