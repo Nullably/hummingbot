@@ -20,7 +20,7 @@ from hummingbot.strategy.x_mm_on_steroids.data_types import Proposal, PriceAmoun
 from hummingbot.core.utils.estimate_fee import estimate_fee
 
 NaN = float("nan")
-s_decimal_zero = Decimal(0)
+s_decimal_zero = Decimal("0")
 s_decimal_nan = Decimal("NaN")
 lms_logger = None
 
@@ -220,12 +220,13 @@ class XMmOnSteroidsStrategy(StrategyPyBase):
                 raise Exception("This strategy supports only oneway position.")
             position_amount = s_decimal_zero
             if len(position) > 0:
-                position_amount = position[0].amount
+                position_amount = position[0].amount * position[0].entry_price
             self._long_budgets[market] = self._order_size - position_amount
             self._short_budgets[market] = abs(- self._order_size - position_amount)
 
     def apply_budget_constraint(self, proposals: List[Proposal]):
-        quote_bal = self._exchange.get_available_balance(self._token)
+        quote_bal = self._exchange.get_available_balance(self._token) * self._steroids_level
+        quote_bal += sum(o.price * o.quantity for o in self.active_orders)
         quote_bal = max(quote_bal, s_decimal_zero)
         for proposal in proposals:
             position = [p for p in self.active_positions if p.trading_pair == proposal.market]
@@ -233,21 +234,24 @@ class XMmOnSteroidsStrategy(StrategyPyBase):
             if position:
                 pos_amount = position[0].amount
             for prop_side in [proposal.buy, proposal.sell]:
-                orderable_amount = s_decimal_zero
-                if (prop_side == proposal.buy and pos_amount < s_decimal_zero) or \
-                        (prop_side == proposal.sell and pos_amount > s_decimal_zero):
-                    orderable_amount = min(abs(pos_amount), prop_side.amount)
-                need_bal_amount = prop_side.amount - orderable_amount
+                free_amount = s_decimal_zero
+                if prop_side == proposal.buy:
+                    prop_side.amount = self._long_budgets[proposal.market] / prop_side.price
+                else:
+                    prop_side.amount = self._short_budgets[proposal.market] / prop_side.price
+                if ((prop_side == proposal.buy and pos_amount < s_decimal_zero) or
+                        (prop_side == proposal.sell and pos_amount > s_decimal_zero)):
+                    free_amount = min(abs(pos_amount), prop_side.amount)
+                need_bal_amount = prop_side.amount - free_amount
                 need_bal_size = need_bal_amount * prop_side.price
                 need_bal_size = min(need_bal_size, quote_bal)
                 need_bal_amount = need_bal_size / prop_side.price
-                order_amount = orderable_amount + need_bal_amount
+                order_amount = free_amount + need_bal_amount
                 # min of 10 USDT per order
                 order_amount = s_decimal_zero if order_amount * prop_side.price < Decimal("10") else order_amount
                 fee = estimate_fee(self._exchange.name, True)
-                # order_amount = order_amount * (prop_side.price * (Decimal("1") + fee.percent))
                 prop_side.amount = self._exchange.quantize_order_amount(proposal.market, order_amount)
-                need_bal_amount = min(prop_side.amount, need_bal_amount)
+                need_bal_amount = prop_side.amount - free_amount
                 quote_bal -= need_bal_amount * (prop_side.price * (Decimal("1") + fee.percent))
 
     def is_within_tolerance(self, cur_orders: List[LimitOrder], proposal: Proposal):
