@@ -13,27 +13,46 @@ pair_url = "https://fapi.binance.com/fapi/v1/exchangeInfo"
 
 
 async def async_main():
+    await markets_by_ath_data()
+    return
     pairs = await BinancePerpetualAPIOrderBookDataSource.fetch_trading_pairs()
     # print(f"{len(pairs)} pairs: {pairs}")
     # return
-    for pair in pairs:
-        params = {"limit": str(500), "interval": "4h", "symbol": pair.replace("-","")}
+    for pair in pairs[:10]:
+        params = {"limit": str(500), "interval": "1d", "symbol": pair.replace("-","")}
         klines = await make_request(kline_url, params)
-        hlc = [[k[2], k[3], k[4]] for k in klines]
+        ohlc = [[k[1], k[2], k[3], k[4], k[5]] for k in klines]
         await asyncio.sleep(0.01)
-        print(f"'{pair}': {hlc}" +",")
+        print(f"'{pair}': {ohlc}" +",")
     await asyncio.sleep(1000)
     #     highs = [k[2] for k in klines]
     # max_high, m_indexes = max_n_index(highs)
     # print(max_high)
     # print(m_indexes)
 
+async def markets_by_ath_data():
+    pairs = await BinancePerpetualAPIOrderBookDataSource.fetch_trading_pairs()
+    results = []
+    for pair in pairs[:10]:
+        params = {"limit": str(500), "interval": "1d", "symbol": pair.replace("-", "")}
+        klines = await make_api_request(kline_url, params)
+        ohlcs = [[float(k[1]), float(k[2]), float(k[3]), float(k[4]), float(k[5])] for k in klines]
+        max_high = max(o[1] for o in ohlcs)
+        close = ohlcs[-1][3]
+        close_to_max = (close - max_high) / max_high
+        avg_10d_q_vol = mean(o[3] * o[4] for o in ohlcs)
+        results.append([pair, close, close_to_max, avg_10d_q_vol])
+    results.sort(key=lambda x: x[2])
+    for result in results:
+        print(f"{result[0]} {result[1]:.4f} {result[2]:.2%} {result[3]:.2f}")
+    return results
+
 def max_n_index(a_list):
     max_high = max(a_list)
     max_indexes = [i for i, j in enumerate(a_list) if j == max_high]
     return max_high, max_indexes
 
-async def make_request(url, params):
+async def make_api_request(url, params):
     async with aiohttp.ClientSession() as client:
         resp = await client.get(url, params=params)
         resp_json = await resp.json()
@@ -78,6 +97,6 @@ def top_apes():
         print(f"{pair}: {ape}")
 
 if __name__ == "__main__":
-    top_apes()
-    # asyncio.get_event_loop().run_until_complete(async_main())
+    # top_apes()
+    asyncio.get_event_loop().run_until_complete(async_main())
 

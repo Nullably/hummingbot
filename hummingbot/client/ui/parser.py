@@ -4,6 +4,7 @@ from typing import (
 )
 from hummingbot.client.errors import ArgumentParserError
 from hummingbot.client.command.connect_command import OPTIONS as CONNECT_OPTIONS
+from hummingbot.client.command.scan_command import OPTIONS as SCAN_OPTIONS
 
 
 class ThrowingArgumentParser(argparse.ArgumentParser):
@@ -145,5 +146,11 @@ def load_parser(hummingbot) -> ThrowingArgumentParser:
     rate_parser.add_argument("-t", "--token", default=None,
                              dest="token", help="The token you want to see its value.")
     rate_parser.set_defaults(func=hummingbot.rate)
+
+    scan_parser = subparsers.add_parser("scan", help="Scan exchanges")
+    scan_parser.add_argument("option", nargs="?", choices=SCAN_OPTIONS, default=None,
+                             help="Option for scan command")
+    scan_parser.add_argument("args", nargs="*")
+    scan_parser.set_defaults(func=hummingbot.scan)
 
     return parser

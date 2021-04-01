@@ -20,6 +20,7 @@ from .open_orders_command import OpenOrdersCommand
 from .trades_command import TradesCommand
 from .pnl_command import PnlCommand
 from .rate_command import RateCommand
+from .scan_command import ScanCommand
 
 
 __all__ = [
@@ -45,4 +46,5 @@ __all__ = [
     TradesCommand,
     PnlCommand,
     RateCommand,
+    ScanCommand
 ]

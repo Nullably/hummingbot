@@ -22,6 +22,7 @@ from hummingbot.core.utils.wallet_setup import list_wallets
 from hummingbot.core.utils.trading_pair_fetcher import TradingPairFetcher
 from hummingbot.client.command.connect_command import OPTIONS as CONNECT_OPTIONS
 from hummingbot.core.rate_oracle.rate_oracle import RateOracleSource
+from hummingbot.client.command.scan_command import OPTIONS as SCAN_OPTIONS
 
 
 def file_name_list(path, file_extension):
@@ -52,6 +53,7 @@ class HummingbotCompleter(Completer):
         self._strategy_completer = WordCompleter(STRATEGIES, ignore_case=True)
         self._py_file_completer = WordCompleter(file_name_list(SCRIPTS_PATH, "py"))
         self._rate_oracle_completer = WordCompleter([r.name for r in RateOracleSource], ignore_case=True)
+        self._scan_completer = WordCompleter(SCAN_OPTIONS, ignore_case=True)
 
     @property
     def prompt_text(self) -> str:
@@ -161,6 +163,9 @@ class HummingbotCompleter(Completer):
     def _complete_rate_oracle_source(self, document: Document):
         return all(x in self.prompt_text for x in ("source", "rate oracle"))
 
+    def _complete_scan_options(self, document: Document):
+        return "scan " == document.text_before_cursor
+
     def get_completions(self, document: Document, complete_event: CompleteEvent):
         """
         Get completions for the current scope. This is the defining function for the completer
@@ -241,6 +246,10 @@ class HummingbotCompleter(Completer):
 
         elif self._complete_rate_oracle_source(document):
             for c in self._rate_oracle_completer.get_completions(document, complete_event):
+                yield c
+
+        elif self._complete_scan_options(document):
+            for c in self._scan_completer.get_completions(document, complete_event):
                 yield c
 
         else:
