@@ -10,14 +10,13 @@ import time
 from hummingbot.core.clock import Clock
 from hummingbot.logger import HummingbotLogger
 from hummingbot.core.data_type.limit_order import LimitOrder
-from hummingbot.core.event.events import OrderType, PositionMode
+from hummingbot.core.event.events import OrderType, PositionMode, TradeType
 from hummingbot.strategy.strategy_py_base import StrategyPyBase
 from hummingbot.strategy.market_trading_pair_tuple import MarketTradingPairTuple
 from hummingbot.core.utils.async_utils import safe_ensure_future
 from hummingbot.connector.derivative.position import Position
 from hummingbot.connector.derivative.binance_perpetual.binance_perpetual_utils import convert_from_exchange_trading_pair
 from hummingbot.strategy.x_mm_on_steroids.data_types import Proposal, PriceAmount
-from hummingbot.core.utils.estimate_fee import estimate_fee
 
 NaN = float("nan")
 s_decimal_zero = Decimal("0")
@@ -41,12 +40,13 @@ class XMmOnSteroidsStrategy(StrategyPyBase):
         super().__init__()
         self._exchange = market_infos[0].market
         self._markets = list(parameters["mm_markets"].split(","))
+        self._markets = sorted(self._markets)
         self._market_infos = {}
         for market in self._markets:
             base, quote = market.split("-")
             self._market_infos[market] = MarketTradingPairTuple(self._exchange, market, base, quote)
         self._token = parameters["token"]
-        self._order_size = Decimal(str(parameters["order_size"]))
+        self._position_size = Decimal(str(parameters["position_size"]))
         self._spread = Decimal(str(parameters["spread"])) / Decimal("100")
         self._order_refresh_time = float(str(parameters["order_refresh_time"]))
         self._order_refresh_tolerance_pct = Decimal(str(parameters["order_refresh_tolerance_pct"])) / Decimal("100")
@@ -63,6 +63,9 @@ class XMmOnSteroidsStrategy(StrategyPyBase):
         self._volatility = {market: s_decimal_nan for market in self._markets}
         self._ready_to_trade = False
         self._mid_price_polling_task = None
+
+        self._last_proposals_created = 0.
+
         self.add_markets([self._exchange])
 
     @property
@@ -88,6 +91,7 @@ class XMmOnSteroidsStrategy(StrategyPyBase):
         self.update_volatility()
         self.update_budgets()
         proposals = self.create_base_proposals()
+        # self.apply_budgets(proposals)
         self.apply_budget_constraint(proposals)
         self.cancel_active_orders(proposals)
         self.execute_orders_proposal(proposals)
@@ -101,12 +105,12 @@ class XMmOnSteroidsStrategy(StrategyPyBase):
         return -1.
 
     async def active_orders_df(self) -> pd.DataFrame:
-        columns = ["Market", "Side", "Price", "Spread", "Amount", "Age"]
+        columns = ["Market", " Side", " Price", " Spread", " Size(USDT)", " Age"]
         data = []
         for order in self.active_orders:
             mid_price = self.get_mid_price(order.trading_pair)
             spread = 0 if mid_price == 0 else abs(order.price - mid_price) / mid_price
-            amount = order.quantity * mid_price
+            size = order.quantity * mid_price
             age = self.order_age(order)
             # // indicates order is a paper order so 'n/a'. For real orders, calculate age.
             age_txt = "n/a" if age <= 0. else pd.Timestamp(age, unit='s').strftime('%H:%M:%S')
@@ -115,21 +119,21 @@ class XMmOnSteroidsStrategy(StrategyPyBase):
                 "long" if order.is_buy else "short",
                 float(order.price),
                 f"{spread:.2%}",
-                float(amount),
+                f"{size:.0f}",
                 age_txt
             ])
         df = pd.DataFrame(data=data, columns=columns)
-        df.sort_values(by=["Market", "Side"], inplace=True)
+        df.sort_values(by=["Market", " Side"], inplace=True)
         return df
 
     def position_status_df(self) -> pd.DataFrame:
         data = []
-        columns = ["Market", "Position Side", f"Size ({self._token})", "Unrealized PNL", "Entry Price", "Steroids"]
+        columns = ["Market", " Position", f" Size ({self._token})", " Unrealized PNL", " Entry Price", " Steroids"]
         for position in self.active_positions:
             data.append([
                 position.trading_pair,
-                position.position_side.name,
-                f"{position.amount * position.entry_price:.2f}",
+                "long" if position.amount > s_decimal_zero else "short",
+                f"{position.amount * position.entry_price:.0f}",
                 f"{position.unrealized_pnl:.2f}",
                 position.entry_price,
                 f"{position.leverage}x"
@@ -140,7 +144,7 @@ class XMmOnSteroidsStrategy(StrategyPyBase):
 
     def market_status_df(self) -> pd.DataFrame:
         data = []
-        columns = ["Market", "Mid price", "Volatility"]
+        columns = ["Market", " Mid price", " Volatility"]
         for market, market_info in self._market_infos.items():
             mid_price = self.get_mid_price(market)
             data.append([
@@ -159,10 +163,11 @@ class XMmOnSteroidsStrategy(StrategyPyBase):
         warning_lines = []
         warning_lines.extend(self.network_warning(list(self._market_infos.values())))
 
-        lines.extend([f"Available Balance: {self._exchange.get_available_balance(self._token)} {self._token}\n"])
+        lines.extend([f"Available Balance: {self._exchange.get_available_balance(self._token)} {self._token}"])
 
-        budget_df = self.position_status_df()
-        lines.extend(["", "  Position:"] + ["    " + line for line in budget_df.to_string(index=False).split("\n")])
+        pos_df = self.position_status_df()
+        if not pos_df.empty:
+            lines.extend(["", "  Positions:"] + ["    " + line for line in pos_df.to_string(index=False).split("\n")])
 
         market_df = self.market_status_df()
         lines.extend(["", "  Markets:"] + ["    " + line for line in market_df.to_string(index=False).split("\n")])
@@ -195,6 +200,8 @@ class XMmOnSteroidsStrategy(StrategyPyBase):
 
     def create_base_proposals(self):
         proposals = []
+        if self._last_proposals_created > self.current_timestamp - 5:
+            return proposals
         for market, market_info in self._market_infos.items():
             spread = self._spread
             if not self._volatility[market].is_nan():
@@ -203,11 +210,12 @@ class XMmOnSteroidsStrategy(StrategyPyBase):
             mid_price = self.get_mid_price(market)
             buy_price = mid_price * (Decimal("1") - spread)
             buy_price = self._exchange.quantize_order_price(market, buy_price)
-            buy_amount = self._order_size / buy_price
+            buy_amount = s_decimal_zero
             sell_price = mid_price * (Decimal("1") + spread)
             sell_price = self._exchange.quantize_order_price(market, sell_price)
-            sell_amount = self._order_size / sell_price
+            sell_amount = s_decimal_zero
             proposals.append(Proposal(market, PriceAmount(buy_price, buy_amount), PriceAmount(sell_price, sell_amount)))
+        self._last_proposals_created = self.current_timestamp
         return proposals
 
     def update_budgets(self):
@@ -221,38 +229,33 @@ class XMmOnSteroidsStrategy(StrategyPyBase):
             position_amount = s_decimal_zero
             if len(position) > 0:
                 position_amount = position[0].amount * position[0].entry_price
-            self._long_budgets[market] = self._order_size - position_amount
-            self._short_budgets[market] = abs(- self._order_size - position_amount)
+            self._long_budgets[market] = self._position_size - position_amount
+            self._short_budgets[market] = abs(- self._position_size - position_amount)
 
     def apply_budget_constraint(self, proposals: List[Proposal]):
         quote_bal = self._exchange.get_available_balance(self._token) * self._steroids_level
-        quote_bal += sum(o.price * o.quantity for o in self.active_orders)
+        self.logger().info(f"Available balance: {self._exchange.get_available_balance(self._token)} ({quote_bal})")
         quote_bal = max(quote_bal, s_decimal_zero)
         for proposal in proposals:
-            position = [p for p in self.active_positions if p.trading_pair == proposal.market]
-            pos_amount = s_decimal_zero
-            if position:
-                pos_amount = position[0].amount
+            base, quote = proposal.market.split("-")
+            fee = self._exchange.get_fee(base, quote, OrderType.LIMIT, TradeType.BUY, s_decimal_zero, s_decimal_zero)
             for prop_side in [proposal.buy, proposal.sell]:
-                free_amount = s_decimal_zero
-                if prop_side == proposal.buy:
-                    prop_side.amount = self._long_budgets[proposal.market] / prop_side.price
-                else:
-                    prop_side.amount = self._short_budgets[proposal.market] / prop_side.price
-                if ((prop_side == proposal.buy and pos_amount < s_decimal_zero) or
-                        (prop_side == proposal.sell and pos_amount > s_decimal_zero)):
-                    free_amount = min(abs(pos_amount), prop_side.amount)
-                need_bal_amount = prop_side.amount - free_amount
-                need_bal_size = need_bal_amount * prop_side.price
+                is_buy = True if prop_side == proposal.buy else False
+                free_size = sum((o.price * o.quantity) * (Decimal("1") + fee.percent) for o in self.active_orders
+                                if o.trading_pair == proposal.market and o.is_buy == is_buy)
+                order_size = self._long_budgets[proposal.market] if is_buy else self._short_budgets[proposal.market]
+                free_size = min(free_size, order_size)
+                need_bal_size = order_size - free_size
                 need_bal_size = min(need_bal_size, quote_bal)
-                need_bal_amount = need_bal_size / prop_side.price
-                order_amount = free_amount + need_bal_amount
+                order_size = need_bal_size + free_size
                 # min of 10 USDT per order
-                order_amount = s_decimal_zero if order_amount * prop_side.price < Decimal("10") else order_amount
-                fee = estimate_fee(self._exchange.name, True)
-                prop_side.amount = self._exchange.quantize_order_amount(proposal.market, order_amount)
-                need_bal_amount = prop_side.amount - free_amount
-                quote_bal -= need_bal_amount * (prop_side.price * (Decimal("1") + fee.percent))
+                order_size = s_decimal_zero if order_size < 10 else order_size
+                prop_side.amount = order_size / (prop_side.price * (Decimal("1") + fee.percent))
+                prop_side.amount = self._exchange.quantize_order_amount(proposal.market, prop_side.amount)
+                quote_bal -= need_bal_size
+        # self.logger().info("Proposals after applied budget")
+        # for proposal in proposals:
+        #     self.logger().info(proposal)
 
     def is_within_tolerance(self, cur_orders: List[LimitOrder], proposal: Proposal):
         cur_buy = [o for o in cur_orders if o.is_buy]
@@ -348,11 +351,6 @@ class XMmOnSteroidsStrategy(StrategyPyBase):
             if atr:
                 self._volatility[market] = mean(atr)
 
-    def notify_hb_app(self, msg: str):
-        if self._hb_app_notification:
-            from hummingbot.client.hummingbot_application import HummingbotApplication
-            HummingbotApplication.main_application()._notify(msg)
-
     async def mid_price_polling_loop(self):
         while True:
             try:
@@ -373,3 +371,22 @@ class XMmOnSteroidsStrategy(StrategyPyBase):
 
     async def start_network(self):
         self._exchange.set_leverage()
+
+    def did_fill_order(self, event):
+        order_id = event.order_id
+        market_info = self.order_tracker.get_shadow_market_pair_from_order_id(order_id)
+        if market_info is not None:
+            if event.trade_type is TradeType.BUY:
+                msg = f"({market_info.trading_pair}) Maker BUY order (price: {event.price}) of {event.amount} " \
+                      f"{market_info.base_asset} is filled."
+                self.log_with_clock(logging.INFO, msg)
+                self.notify_hb_app(msg)
+            else:
+                msg = f"({market_info.trading_pair}) Maker SELL order (price: {event.price}) of {event.amount} " \
+                      f"{market_info.base_asset} is filled."
+                self.log_with_clock(logging.INFO, msg)
+                self.notify_hb_app(msg)
+
+    def notify_hb_app(self, msg: str):
+        from hummingbot.client.hummingbot_application import HummingbotApplication
+        HummingbotApplication.main_application()._notify(msg)

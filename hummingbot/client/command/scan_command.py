@@ -1,7 +1,7 @@
 import aiohttp
 import pandas as pd
 from statistics import mean
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, List
 from hummingbot.core.utils.async_utils import safe_ensure_future
 from hummingbot.connector.derivative.binance_perpetual.binance_perpetual_api_order_book_data_source import BinancePerpetualAPIOrderBookDataSource
 
@@ -9,7 +9,7 @@ if TYPE_CHECKING:
     from hummingbot.client.hummingbot_application import HummingbotApplication
 
 OPTIONS = [
-    "markets_by_ath"
+    "top_proximity"
 ]
 kline_url = "https://fapi.binance.com/fapi/v1/klines"
 pair_url = "https://fapi.binance.com/fapi/v1/exchangeInfo"
@@ -18,25 +18,31 @@ pair_url = "https://fapi.binance.com/fapi/v1/exchangeInfo"
 class ScanCommand:
     def scan(self,  # type: HummingbotApplication
              option: str = None,
+             args: List[str] = None
              ):
         self.app.clear_input()
         if option == OPTIONS[0]:
-            safe_ensure_future(self.show_markets_by_ath())
+            safe_ensure_future(self.show_top_proximity())
 
-    async def show_markets_by_ath(self):
+    async def show_top_proximity(self):
+        self._notify("This scan retrieves 500 day kline data from Binance Futures on every market to "
+                     "calculate top proximity metrics.")
+        self._notify("Retrieving data from Binance Futures... this will take about a minute.")
         lines = []
-        df = await self.markets_by_ath_df()
-        lines.extend(["", "Markets By ATH:"] + [line for line in df.to_string(index=False).split("\n")])
+        df = await self.top_proximity_df()
+        lines.extend(["", "Top Proximity:"] + [line for line in df.to_string(index=False).split("\n")])
         msg = "\n".join(lines)
         self._notify(msg)
+        self._notify("Top proximity is (last_price - top)/top. The closer to 0, the closer it is to the top "
+                     "(from 500 days data).")
 
-    async def markets_by_ath_df(self) -> pd.DataFrame:
-        data = await self.markets_by_ath_data()
-        columns = ["Market", "Last Price", "Last to Max High", "Avg 10d Volume (USDT)"]
+    async def top_proximity_df(self) -> pd.DataFrame:
+        data = await self.top_proximity_data()
+        columns = ["Market", "Last Price", "*Top Proximity", "Avg 10d Vol(USDT)", "Avg 10d Volatility"]
         df = pd.DataFrame(data=data, columns=columns).replace(regex=True)
         return df
 
-    async def markets_by_ath_data(self):
+    async def top_proximity_data(self):
         pairs = await BinancePerpetualAPIOrderBookDataSource.fetch_trading_pairs()
         results = []
         for pair in pairs:
@@ -47,9 +53,10 @@ class ScanCommand:
             close = ohlcs[-1][3]
             close_to_max = (close - max_high) / max_high
             avg_10d_q_vol = mean(o[3] * o[4] for o in ohlcs) / 1e6
-            results.append([pair, close, close_to_max, avg_10d_q_vol])
+            avg_10d_volatility = mean((o[1] - o[2]) / o[2] for o in ohlcs)
+            results.append([pair, close, close_to_max, avg_10d_q_vol, avg_10d_volatility])
         results.sort(key=lambda x: x[2], reverse=True)
-        results = [[r[0], r[1], f"{r[2]:.2%}", f"{round(r[3])} M"] for r in results]
+        results = [[r[0], r[1], f"{r[2]:.2%}", f"{round(r[3])} M", f"{r[4]:.2%}"] for r in results]
         return results
 
     async def make_api_request(self, url, params):

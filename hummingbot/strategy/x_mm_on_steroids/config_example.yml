@@ -1,22 +1,32 @@
 template_version: 1
 strategy: x_mm_on_steroids
 
+# This strategy does not actually use order books but to satisfy connector requirement we need have at least 1 pair.
+# You can leave this setting as is.
 markets:
   binance_perpetual:
   - BTC-USDT
 
+# The actual markets to market make, comma separated value, e.g. BTC-USDT,ETH-USDT
+mm_markets: HNT-USDT,LUNA-USDT,ENJ-USDT,MATIC-USDT,DEFI-USDT,CHZ-USDT
 
-mm_markets: BTC-USDT,ETH-USDT
-
+# Only USDT for now.
 token: USDT
 
-order_amount: 20
+# Leverage level, e.g. enter 5 for 5x leverage
+steroids_level: 5
 
-spread: 2.0
+# Maximum position size on either long or short in USDT amount, each of your positions will be ping-ponging between
+# being long and short with this config as its maximum position size.
+position_size: 60
 
-order_refresh_time: 5.0
+# Initial and minimum bid and ask spreads for all markets, spreads will get adjusted on volatility once the volatility
+# calculation kicks in.
+spread: 1.0
 
-order_refresh_tolerance_pct: 0.1
+order_refresh_time: 10.0
+
+order_refresh_tolerance_pct: 0.2
 
 volatility_interval: 300
 
