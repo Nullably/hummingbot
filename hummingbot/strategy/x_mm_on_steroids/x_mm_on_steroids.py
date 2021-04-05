@@ -200,8 +200,8 @@ class XMmOnSteroidsStrategy(StrategyPyBase):
 
     def create_base_proposals(self):
         proposals = []
-        if self._last_proposals_created > self.current_timestamp - 5:
-            return proposals
+        # if self._last_proposals_created > self.current_timestamp - 5:
+        #     return proposals
         for market, market_info in self._market_infos.items():
             spread = self._spread
             if not self._volatility[market].is_nan():
@@ -215,7 +215,7 @@ class XMmOnSteroidsStrategy(StrategyPyBase):
             sell_price = self._exchange.quantize_order_price(market, sell_price)
             sell_amount = s_decimal_zero
             proposals.append(Proposal(market, PriceAmount(buy_price, buy_amount), PriceAmount(sell_price, sell_amount)))
-        self._last_proposals_created = self.current_timestamp
+        # self._last_proposals_created = self.current_timestamp
         return proposals
 
     def update_budgets(self):
@@ -234,7 +234,7 @@ class XMmOnSteroidsStrategy(StrategyPyBase):
 
     def apply_budget_constraint(self, proposals: List[Proposal]):
         quote_bal = self._exchange.get_available_balance(self._token) * self._steroids_level
-        self.logger().info(f"Available balance: {self._exchange.get_available_balance(self._token)} ({quote_bal})")
+        # self.logger().info(f"Available balance: {self._exchange.get_available_balance(self._token)} ({quote_bal})")
         quote_bal = max(quote_bal, s_decimal_zero)
         for proposal in proposals:
             base, quote = proposal.market.split("-")
