@@ -155,7 +155,8 @@ amm_arb_config_map = {
         type_str="decimal"),
     "max_delta_multiple": ConfigVar(
         key="max_delta_multiple",
-        prompt="What is the maximum delta amount (defined as multiple of order_amount) before the bot pauses? >>> ",
+        prompt="What is the maximum delta amount (defined as multiple of order_amount) before the bot stops arbitrage? "
+               ">>> ",
         default=Decimal("3"),
         validator=lambda v: validate_decimal(v),
         type_str="decimal"),

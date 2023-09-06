@@ -168,11 +168,3 @@ class ArbProposal:
 
     async def wait(self):
         return await safe_gather(*[self.first_side.completed_event.wait(), self.second_side.completed_event.wait()])
-
-
-arbside1 = ArbProposalSide(None, None, None, None, None, None)
-print(f"{arbside1.is_failed=}")
-arbside1.set_failed()
-arbside2 = ArbProposalSide(None, None, None, None, None, None)
-print(f"{arbside1.is_failed=}")
-print(f"{arbside2.is_failed=}")
