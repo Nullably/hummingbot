@@ -2,7 +2,7 @@
 ###   AMM Arbitrage strategy config   ###
 ##########################################
 
-template_version: 6
+template_version: 7
 strategy: null
 
 # The following configurations are only required for the AMM arbitrage trading strategy
@@ -45,3 +45,5 @@ rate_oracle_enabled: true
 
 # What is the fixed_rate used to convert quote assets?
 quote_conversion_rate: 1
+
+max_delta_multiple: null

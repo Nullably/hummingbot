@@ -1,4 +1,5 @@
 import asyncio
+import dataclasses
 import logging
 from dataclasses import dataclass
 from decimal import Decimal
@@ -28,8 +29,8 @@ class ArbProposalSide:
     order_price: Decimal
     amount: Decimal
     extra_flat_fees: List[TokenAmount]
-    completed_event: asyncio.Event = asyncio.Event()
-    failed_event: asyncio.Event = asyncio.Event()
+    completed_event: asyncio.Event = dataclasses.field(default_factory=asyncio.Event)
+    failed_event: asyncio.Event = dataclasses.field(default_factory=asyncio.Event)
 
     def __repr__(self):
         side = "buy" if self.is_buy else "sell"
@@ -167,3 +168,11 @@ class ArbProposal:
 
     async def wait(self):
         return await safe_gather(*[self.first_side.completed_event.wait(), self.second_side.completed_event.wait()])
+
+
+arbside1 = ArbProposalSide(None, None, None, None, None, None)
+print(f"{arbside1.is_failed=}")
+arbside1.set_failed()
+arbside2 = ArbProposalSide(None, None, None, None, None, None)
+print(f"{arbside1.is_failed=}")
+print(f"{arbside2.is_failed=}")

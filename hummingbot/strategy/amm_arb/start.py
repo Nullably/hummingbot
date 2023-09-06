@@ -26,6 +26,7 @@ def start(self):
     gateway_transaction_cancel_interval = amm_arb_config_map.get("gateway_transaction_cancel_interval").value
     rate_oracle_enabled = amm_arb_config_map.get("rate_oracle_enabled").value
     quote_conversion_rate = amm_arb_config_map.get("quote_conversion_rate").value
+    max_delta_multiple = amm_arb_config_map.get("max_delta_multiple").value
 
     self._initialize_markets([(connector_1, [market_1]), (connector_2, [market_2])])
     base_1, quote_1 = market_1.split("-")
@@ -75,4 +76,5 @@ def start(self):
                               concurrent_orders_submission=concurrent_orders_submission,
                               gateway_transaction_cancel_interval=gateway_transaction_cancel_interval,
                               rate_source=rate_source,
+                              max_delta_multiple=max_delta_multiple,
                               )

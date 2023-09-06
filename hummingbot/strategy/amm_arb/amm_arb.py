@@ -12,6 +12,7 @@ from hummingbot.connector.connector_base import ConnectorBase
 from hummingbot.connector.gateway.amm.gateway_evm_amm import GatewayEVMAMM
 from hummingbot.connector.gateway.gateway_price_shim import GatewayPriceShim
 from hummingbot.core.clock import Clock
+from hummingbot.core.data_type.common import TradeType
 from hummingbot.core.data_type.limit_order import LimitOrder
 from hummingbot.core.data_type.market_order import MarketOrder
 from hummingbot.core.data_type.trade_fee import TokenAmount
@@ -20,6 +21,7 @@ from hummingbot.core.event.events import (
     MarketOrderFailureEvent,
     OrderCancelledEvent,
     OrderExpiredEvent,
+    OrderFilledEvent,
     OrderType,
     SellOrderCompletedEvent,
 )
@@ -82,6 +84,7 @@ class AmmArbStrategy(StrategyPyBase):
                     status_report_interval: float = 900,
                     gateway_transaction_cancel_interval: int = 600,
                     rate_source: Optional[RateOracle] = RateOracle.get_instance(),
+                    max_delta_multiple: Decimal = Decimal("3"),
                     ):
         """
         Assigns strategy parameters, this function must be called directly after init.
@@ -128,6 +131,8 @@ class AmmArbStrategy(StrategyPyBase):
         self._gateway_transaction_cancel_interval = gateway_transaction_cancel_interval
 
         self._order_id_side_map: Dict[str, ArbProposalSide] = {}
+        self._max_delta_multiple: Decimal = max_delta_multiple
+        self._net_delta: Decimal = s_decimal_zero
 
     @property
     def all_markets_ready(self) -> bool:
@@ -203,6 +208,11 @@ class AmmArbStrategy(StrategyPyBase):
         min profitability required, applies the slippage buffer, applies budget constraint, then finally execute the
         arbitrage.
         """
+        if abs(self._net_delta) > self._max_delta_multiple * self._order_amount:
+            self.logger().info(f"Net delta amount ({self._net_delta} is now over max_delta_multiple times order_amount "
+                               f"({self._max_delta_multiple} x {self._order_amount}), arbitrage operation is now "
+                               f"skipped.")
+            return
         self._all_arb_proposals = await create_arb_proposals(
             market_info_1=self._market_info_1,
             market_info_2=self._market_info_2,
@@ -540,3 +550,6 @@ class AmmArbStrategy(StrategyPyBase):
             self._main_task.cancel()
             self._main_task = None
         super().stop(clock)
+
+    def did_fill_order(self, event: OrderFilledEvent):
+        self._net_delta += event.amount * (1 if event.trade_type is TradeType.BUY else -1)
