@@ -380,8 +380,10 @@ class AmmArbStrategy(StrategyPyBase):
                     market.connector_name, market.chain, market.network, market_info.trading_pair):
                 order_price = await market.get_order_price(market_info.trading_pair, is_buy, amount, ignore_shim=True)
                 order_price *= slippage_buffer_factor
-
-        return place_order_fn(market_info, amount, market_info.market.get_taker_order_type(), order_price)
+        order_type = OrderType.LIMIT
+        if order_type not in market_info.market.supported_order_types():
+            order_type = market_info.market.get_taker_order_type()
+        return place_order_fn(market_info, amount, order_type, order_price)
 
     def ready_for_new_arb_trades(self) -> bool:
         """
