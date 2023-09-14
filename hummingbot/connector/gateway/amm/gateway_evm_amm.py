@@ -260,7 +260,7 @@ class GatewayEVMAMM(ConnectorBase):
             self._chain_info = await self._get_gateway_instance().get_network_status(
                 chain=self.chain, network=self.network
             )
-            if type(self._chain_info) != list:
+            if type(self._chain_info) != list:  # noqa: E721
                 self._native_currency = self._chain_info.get("nativeCurrency", "ETH")
         except asyncio.CancelledError:
             raise
@@ -1074,3 +1074,9 @@ class GatewayEVMAMM(ConnectorBase):
     def _get_gateway_instance(self) -> GatewayHttpClient:
         gateway_instance = GatewayHttpClient.get_instance(self._client_config)
         return gateway_instance
+
+    def supported_order_types(self) -> List[OrderType]:
+        """
+        :return a list of OrderType supported by this connector
+        """
+        return [OrderType.LIMIT]
