@@ -408,7 +408,7 @@ class GatewayEVMAMM(ConnectorBase):
             return Decimal(str(price))
         return None
 
-    @async_ttl_cache(ttl=5, maxsize=10)
+    @async_ttl_cache(ttl=1, maxsize=10)
     async def get_quote_price(
             self,
             trading_pair: str,
